@@ -14,39 +14,38 @@
 - [X] Install dev deps: typescript, tsx, @types/express, @types/cors
 - [X] Create `.env` with PORT, MONGODB_URI, FRONTEND_URL, AI API keys
 - [X] Create `src/index.ts` — the single flat entry point + `npm run dev` script
-- [X] Dependencies installed successfully
 
 ## Phase 2: Database Schemas (inline in `src/index.ts`)
-- [ ] MongoDB Atlas connection via native `mongodb` driver
-- [ ] Define `product` collection indexes (title text, tags, category, price, rating)
-- [ ] Define `user` collection helpers (shared with Better Auth)
+- [X] MongoDB Atlas connection via native `mongodb` driver
+- [X] Define `product` collection indexes (title text, tags, category, price, rating)
+- [X] Define `user` collection helpers (shared with Better Auth)
 
 ## Phase 3: Middleware (inline in `src/index.ts`)
-- [ ] CORS — `origin: FRONTEND_URL`, credentials: true
-- [ ] `express.json()`
-- [ ] `verifyToken` — reads `Bearer <token>`, queries `session` collection, attaches `req.user`
-- [ ] `requireRole` closure — checks role, returns 403
-- [ ] Rate limiter — global + stricter on AI routes
-- [ ] Global error handler at bottom
+- [X] CORS — `origin: FRONTEND_URL`, credentials: true
+- [X] `express.json()` — with 1mb limit
+- [X] `verifyToken` — reads `Bearer <token>`, queries `session` collection, attaches `req.user`
+- [X] `requireRole` closure — checks role, returns 403
+- [X] Rate limiter — global (100/min) + stricter AI limiter (20/min)
+- [X] Global error handler at bottom + 404 handler
 
 ## Phase 4: Product Routes (`GET/POST/DELETE /api/items/*`)
-- [ ] `GET /api/items` — public catalog, filters, sort, cursor pagination
-- [ ] `GET /api/items/:id` — public, single product
-- [ ] `POST /api/items` — protected (vendor+), create
-- [ ] `DELETE /api/items/:id` — protected, verify ownership
+- [X] `GET /api/items` — public catalog, filters, sort, cursor pagination
+- [X] `GET /api/items/:id` — public, single product
+- [X] `POST /api/items` — protected (vendor+), create product
+- [X] `DELETE /api/items/:id` — protected, verify ownership
 
 ## Phase 5: AI Routes (`POST /api/ai/*`)
-- [ ] `POST /api/ai/generate` — protected, LLM copy generation
-- [ ] `POST /api/ai/recommend` — protected, LLM recommendations
+- [X] `POST /api/ai/generate` — protected, LLM copy gen (OpenAI/Gemini/Claude)
+- [X] `POST /api/ai/recommend` — protected, LLM recommendations
 
 ## Phase 6: Validation & Hardening
-- [ ] Input validation on all POST bodies
-- [ ] No `$where`/`$regex` injection in query params
-- [ ] `trust proxy` for rate limiting
+- [X] Input validation on POST /api/items (title length, price > 0, tags type check)
+- [X] `sanitize()` helper strips `$` operators from queries/bodies (NoSQL injection)
+- [X] `trust proxy` for rate limiting behind reverse proxy
 
 ## Phase 7: Health & Logging
-- [ ] `GET /api/health` endpoint
-- [ ] Request logging (morgan or custom)
+- [X] `GET /api/health` endpoint
+- [X] Request logging (timestamp + method + url)
 
 ## Phase 8: Deployment
 - [ ] Production build script
