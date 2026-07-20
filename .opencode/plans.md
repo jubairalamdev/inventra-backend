@@ -8,58 +8,47 @@
 ---
 
 ## Phase 1: Project Setup
-
-- [ ] Initialize Node.js project with `package.json`, `tsconfig.json` (strict mode)
-- [ ] Install dependencies: express, mongoose, jsonwebtoken, cors, bcrypt, dotenv, express-rate-limit
-- [ ] Install AI SDKs: openai, @google/generative-ai, @anthropic-ai/sdk
-- [ ] Install dev deps: typescript, ts-node-dev, @types/*
-- [ ] Create `src/index.ts` — the single flat entry point
-- [ ] Set up environment variables: `PORT`, `MONGODB_URI`, `JWT_SECRET`, `FRONTEND_URL`, AI API keys
+- [X] Init `package.json` with ESM + `tsconfig.json` strict mode
+- [X] Install deps: express, mongodb, cors, dotenv, express-rate-limit
+- [X] Install AI SDKs: openai, @google/generative-ai, @anthropic-ai/sdk
+- [X] Install dev deps: typescript, tsx, @types/express, @types/cors
+- [X] Create `.env` with PORT, MONGODB_URI, FRONTEND_URL, AI API keys
+- [X] Create `src/index.ts` — the single flat entry point + `npm run dev` script
+- [X] Dependencies installed successfully
 
 ## Phase 2: Database Schemas (inline in `src/index.ts`)
-
-- [ ] Define `User` schema: email (unique, indexed), passwordHash (select: false), fullName, provider, role (enum), interactionLog
-- [ ] Define `Product` schema: title, shortDescription, fullDescription, price, category, tags, rating, vendorId (ref User), telemetry
+- [ ] MongoDB Atlas connection via native `mongodb` driver
+- [ ] Define `product` collection indexes (title text, tags, category, price, rating)
+- [ ] Define `user` collection helpers (shared with Better Auth)
 
 ## Phase 3: Middleware (inline in `src/index.ts`)
+- [ ] CORS — `origin: FRONTEND_URL`, credentials: true
+- [ ] `express.json()`
+- [ ] `verifyToken` — reads `Bearer <token>`, queries `session` collection, attaches `req.user`
+- [ ] `requireRole` closure — checks role, returns 403
+- [ ] Rate limiter — global + stricter on AI routes
+- [ ] Global error handler at bottom
 
-- [ ] Implement CORS middleware — `origin: process.env.FRONTEND_URL`, credentials: true
-- [ ] Implement JSON body parser, URL-encoded parser
-- [ ] Implement rate limiter (global + stricter on auth/AI routes)
-- [ ] Implement `authenticateUser` middleware (JWT verification, attaches to `req.user`)
-- [ ] Implement `requireRole` middleware closure (checks role, returns 403)
-- [ ] Implement global error handler at bottom of file
+## Phase 4: Product Routes (`GET/POST/DELETE /api/items/*`)
+- [ ] `GET /api/items` — public catalog, filters, sort, cursor pagination
+- [ ] `GET /api/items/:id` — public, single product
+- [ ] `POST /api/items` — protected (vendor+), create
+- [ ] `DELETE /api/items/:id` — protected, verify ownership
 
-## Phase 4: Auth Routes (`POST /api/v1/auth/*`)
+## Phase 5: AI Routes (`POST /api/ai/*`)
+- [ ] `POST /api/ai/generate` — protected, LLM copy generation
+- [ ] `POST /api/ai/recommend` — protected, LLM recommendations
 
-- [ ] `POST /register` — validate input, hash password, create user, return JWT
-- [ ] `POST /login` — find user by email, compare password, return JWT
-- [ ] `POST /social-callback` — handle Google OAuth / Better Auth callback
-- [ ] Integrate Better Auth SDK for OAuth session syncing
+## Phase 6: Validation & Hardening
+- [ ] Input validation on all POST bodies
+- [ ] No `$where`/`$regex` injection in query params
+- [ ] `trust proxy` for rate limiting
 
-## Phase 5: Product Routes (`GET/POST/DELETE /api/v1/items/*`)
+## Phase 7: Health & Logging
+- [ ] `GET /api/health` endpoint
+- [ ] Request logging (morgan or custom)
 
-- [ ] `GET /` — compound query with filters: category, priceRange, minRating, text search; sort by latency, downloads; paginate results
-- [ ] `GET /:id` — fetch single product + update user interactionLog
-- [ ] `POST /` — protected (vendor+), create product document
-- [ ] `DELETE /:id` — protected (vendor/admin), verify ownership, delete product
-
-## Phase 6: AI Routes (`POST /api/v1/ai/*`)
-
-- [ ] `POST /generate` — accept app variables, call LLM (OpenAI/Gemini/Claude) with zero-temperature prompt, return generated copy
-- [ ] `POST /recommend` — read active filter context, query DB, feed to LLM, return array of product IDs
-
-## Phase 7: Security & Validation
-
-- [ ] Input sanitization and schema validation on all POST/PUT endpoints
-- [ ] Password hashing with bcrypt (salt rounds 12)
-- [ ] JWT expiry configuration (access token)
-- [ ] Environment-based key management (never hardcode secrets)
-
-## Phase 8: Production Readiness
-
-- [ ] Add health check endpoint (`GET /api/v1/health`)
-- [ ] Add request logging middleware (morgan or custom)
-- [ ] Finalize CORS whitelist and rate limit tuning
-- [ ] Test all endpoints with a REST client
-- [ ] Deploy to Railway / Render / Fly.io (separate origin from frontend)
+## Phase 8: Deployment
+- [ ] Production build script
+- [ ] Final CORS/rate-limit tuning
+- [ ] Deploy to Railway / Render / Fly.io
