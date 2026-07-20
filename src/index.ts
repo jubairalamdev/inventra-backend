@@ -106,6 +106,28 @@ async function start() {
     res.json(item)
   })
 
+  app.post("/api/items", verifyToken, async (req: Req, res: Response) => {
+    const { title, shortDescription, fullDescription, price, category, tags } = req.body
+    if (!title || !price || !category)
+      return res.status(400).json({ error: "title, price, and category are required" })
+
+    const item = {
+      title,
+      shortDescription: shortDescription || "",
+      fullDescription: fullDescription || "",
+      price: Number(price),
+      category,
+      tags: tags || [],
+      rating: 0,
+      vendorId: new ObjectId(req.user!._id),
+      telemetry: {},
+      createdAt: new Date(),
+      downloads: 0,
+    }
+    const result = await db.collection("product").insertOne(item)
+    res.status(201).json({ _id: result.insertedId, ...item })
+  })
+
   function requireRole(...roles: string[]) {
     return (req: Req, res: Response, next: NextFunction) => {
       if (!req.user)
