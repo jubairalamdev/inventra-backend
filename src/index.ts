@@ -15,7 +15,7 @@ let db: import("mongodb").Db
 
 async function start() {
   await client.connect()
-  db = client.db()
+  db = client.db("inventra")
   console.log("Connected to MongoDB Atlas")
 
   await db.collection("products").createIndexes([
