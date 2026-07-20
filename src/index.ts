@@ -4,6 +4,9 @@ import cors from "cors"
 import { MongoClient, ObjectId } from "mongodb"
 import rateLimit from "express-rate-limit"
 import type { Request, Response, NextFunction } from "express"
+import OpenAI from "openai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
+import Anthropic from "@anthropic-ai/sdk"
 
 const app = express()
 const PORT = process.env.PORT || 4000
@@ -141,6 +144,59 @@ async function start() {
 
     await db.collection("product").deleteOne({ _id: new ObjectId(req.params.id) })
     res.json({ message: "Product deleted" })
+  })
+
+  const aiLimiter = rateLimit({ windowMs: 60_000, max: 20 })
+
+  app.post("/api/ai/generate", verifyToken, aiLimiter, async (req: Req, res: Response) => {
+    const { title, category, keywords, tone } = req.body
+    if (!title)
+      return res.status(400).json({ error: "title is required" })
+
+    const prompt = `Generate a product listing for an AI agent asset.
+Title: ${title}
+Category: ${category || "general"}
+Keywords: ${keywords?.join(", ") || "none"}
+Tone: ${tone || "professional"}
+
+Return JSON with:
+- shortDescription (1-2 sentences)
+- fullDescription (2-3 paragraphs, markdown)
+- tags (array of 3-5 strings)`
+
+    const provider = process.env.AI_PROVIDER || "openai"
+
+    if (provider === "openai") {
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        response_format: { type: "json_object" },
+      })
+      return res.json(JSON.parse(completion.choices[0].message.content!))
+    }
+
+    if (provider === "gemini") {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+      const result = await model.generateContent(prompt + "\n\nRespond with JSON only.")
+      const text = result.response.text().replace(/```json|```/g, "").trim()
+      return res.json(JSON.parse(text))
+    }
+
+    if (provider === "claude") {
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        temperature: 0,
+        messages: [{ role: "user", content: prompt }],
+      })
+      return res.json(JSON.parse((msg.content[0] as any).text!))
+    }
+
+    res.status(500).json({ error: "No AI provider configured" })
   })
 
   function requireRole(...roles: string[]) {
