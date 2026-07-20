@@ -398,4 +398,9 @@ Pick the top ${limit} items most likely to be bought together or viewed together
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
 }
 
-start().catch(console.error)
+const isVercel = process.env.VERCEL === "1"
+if (!isVercel) {
+  start().catch(console.error)
+}
+
+export { app, start }
