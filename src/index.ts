@@ -55,6 +55,49 @@ async function start() {
     next()
   }
 
+  app.get("/api/items", async (req: Req, res: Response) => {
+    const {
+      category,
+      minPrice,
+      maxPrice,
+      minRating,
+      search,
+      sort,
+      cursor,
+      limit = "12",
+    } = req.query as Record<string, string>
+
+    const filter: any = {}
+    if (category) filter.category = category
+    if (minPrice || maxPrice) {
+      filter.price = {}
+      if (minPrice) filter.price.$gte = Number(minPrice)
+      if (maxPrice) filter.price.$lte = Number(maxPrice)
+    }
+    if (minRating) filter.rating = { $gte: Number(minRating) }
+    if (search) filter.$text = { $search: search }
+    if (cursor) filter._id = { $lt: new ObjectId(cursor) }
+
+    const sortMap: Record<string, any> = {
+      rating: { rating: -1 },
+      downloads: { downloads: -1 },
+      price: { price: 1 },
+      newest: { _id: -1 },
+    }
+    const sortOption = sortMap[sort] || { _id: -1 }
+
+    const items = await db
+      .collection("product")
+      .find(filter)
+      .sort(sortOption)
+      .limit(Number(limit))
+      .toArray()
+
+    const nextCursor = items.length === Number(limit) ? items[items.length - 1]._id : null
+
+    res.json({ items, nextCursor })
+  })
+
   function requireRole(...roles: string[]) {
     return (req: Req, res: Response, next: NextFunction) => {
       if (!req.user)
