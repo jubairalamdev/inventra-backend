@@ -128,6 +128,21 @@ async function start() {
     res.status(201).json({ _id: result.insertedId, ...item })
   })
 
+  app.delete("/api/items/:id", verifyToken, async (req: Req, res: Response) => {
+    const item = await db.collection("product").findOne({
+      _id: new ObjectId(req.params.id),
+    })
+    if (!item) return res.status(404).json({ error: "Product not found" })
+
+    const isOwner = item.vendorId.toString() === req.user!._id.toString()
+    const isAdmin = req.user!.role === "admin"
+    if (!isOwner && !isAdmin)
+      return res.status(403).json({ error: "Not authorized to delete this item" })
+
+    await db.collection("product").deleteOne({ _id: new ObjectId(req.params.id) })
+    res.json({ message: "Product deleted" })
+  })
+
   function requireRole(...roles: string[]) {
     return (req: Req, res: Response, next: NextFunction) => {
       if (!req.user)
