@@ -34,10 +34,19 @@ async function start() {
   app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }))
   app.use(express.json({ limit: "1mb" }))
 
+  type Req = Request & { user?: any }
+
   const apiLimiter = rateLimit({ windowMs: 60_000, max: 100 })
   app.use("/api/", apiLimiter)
 
-  type Req = Request & { user?: any }
+  app.use((req: Req, res: Response, next: NextFunction) => {
+    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`)
+    next()
+  })
+
+  app.get("/api/health", async (req: Req, res: Response) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() })
+  })
 
   function sanitize(v: any): any {
     if (typeof v === "object" && v !== null) {
