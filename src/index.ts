@@ -106,7 +106,7 @@ async function start() {
   })
 
   app.get("/api/products/:id", async (req: Req, res: Response) => {
-    const item = await db.collection("products").findOne({ _id: new ObjectId(req.params.id) })
+    const item = await db.collection("products").findOne({ _id: new ObjectId(req.params.id as string) })
     if (!item) return res.status(404).json({ error: "Product not found" })
     res.json(item)
   })
@@ -160,7 +160,7 @@ async function start() {
     if (tags !== undefined) update.tags = tags
 
     const result = await db.collection("products").findOneAndUpdate(
-      { _id: new ObjectId(req.params.id) },
+      { _id: new ObjectId(req.params.id as string) },
       { $set: update },
       { returnDocument: "after" },
     )
@@ -170,7 +170,7 @@ async function start() {
 
   app.delete("/api/products/:id", verifyToken, async (req: Req, res: Response) => {
     if (req.user!.role !== "admin") return res.status(403).json({ error: "Admin only" })
-    const result = await db.collection("products").deleteOne({ _id: new ObjectId(req.params.id) })
+    const result = await db.collection("products").deleteOne({ _id: new ObjectId(req.params.id as string) })
     if (result.deletedCount === 0) return res.status(404).json({ error: "Product not found" })
     res.json({ message: "Product deleted" })
   })
@@ -178,7 +178,7 @@ async function start() {
   // ─── Cart ──────────────────────────────────────────────
 
   app.get("/api/cart", verifyToken, async (req: Req, res: Response) => {
-    let cart = await db.collection("cart").findOne({ userId: new ObjectId(req.user!._id) })
+    let cart: any = await db.collection("cart").findOne({ userId: new ObjectId(req.user!._id) })
     if (!cart) {
       cart = { userId: new ObjectId(req.user!._id), items: [] }
       await db.collection("cart").insertOne(cart)
@@ -297,7 +297,7 @@ async function start() {
     const valid = ["confirmed", "shipped", "delivered", "cancelled"]
     if (!valid.includes(status)) return res.status(400).json({ error: `Status must be one of: ${valid.join(", ")}` })
     const order = await db.collection("orders").findOneAndUpdate(
-      { _id: new ObjectId(req.params.id) },
+      { _id: new ObjectId(req.params.id as string) },
       { $set: { status, updatedAt: new Date() } },
       { returnDocument: "after" },
     )
@@ -306,7 +306,7 @@ async function start() {
   })
 
   app.get("/api/orders/:id", verifyToken, async (req: Req, res: Response) => {
-    const order = await db.collection("orders").findOne({ _id: new ObjectId(req.params.id) })
+    const order = await db.collection("orders").findOne({ _id: new ObjectId(req.params.id as string) })
     if (!order) return res.status(404).json({ error: "Order not found" })
     if (order.userId.toString() !== req.user!._id.toString() && req.user!.role !== "admin")
       return res.status(403).json({ error: "Not authorized" })
