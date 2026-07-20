@@ -299,6 +299,18 @@ async function start() {
 
   const CATEGORIES = ["Keyboards", "Mice", "Headsets", "Controllers", "Mousepads", "Chairs", "Monitors", "Speakers", "Webcams", "Capture Cards"]
 
+  async function callGemini(prompt: string): Promise<string | null> {
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+      const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }] })
+      return result.response.text().replace(/```json|```/g, "").trim()
+    } catch (err: any) {
+      console.error("Gemini API error:", err.message)
+      return null
+    }
+  }
+
   app.post("/api/ai/generate", verifyToken, aiLimiter, async (req: Req, res: Response) => {
     const { name, category, keywords, tone } = req.body
     if (!name) return res.status(400).json({ error: "name is required" })
@@ -319,11 +331,14 @@ Return JSON with these fields:
 
 Only respond with JSON, no other text.`
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-    const result = await model.generateContent(prompt)
-    const text = result.response.text().replace(/```json|```/g, "").trim()
-    res.json(JSON.parse(text))
+    const text = await callGemini(prompt)
+    if (!text) return res.status(503).json({ error: "AI service unavailable (quota exceeded). Try again later." })
+
+    try {
+      res.json(JSON.parse(text))
+    } catch {
+      res.status(500).json({ error: "Failed to parse AI response" })
+    }
   })
 
   app.post("/api/ai/recommend", verifyToken, aiLimiter, async (req: Req, res: Response) => {
@@ -342,14 +357,20 @@ ${snippet}
 
 Pick the top ${limit} items most likely to be bought together or viewed together. Return a JSON array of _id values: { "items": ["id1", "id2", ...] }`
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
-    const result = await model.generateContent(prompt)
-    const text = result.response.text().replace(/```json|```/g, "").trim()
-    const parsed = JSON.parse(text)
+    const text = await callGemini(prompt)
 
-    const items = await db.collection("products").find({ _id: { $in: parsed.items.map((id: string) => new ObjectId(id)) } }).toArray()
-    res.json({ recommendations: items })
+    if (text) {
+      try {
+        const parsed = JSON.parse(text)
+        const items = await db.collection("products").find({ _id: { $in: parsed.items.map((id: string) => new ObjectId(id)) } }).toArray()
+        return res.json({ recommendations: items })
+      } catch {
+        // fall through to fallback
+      }
+    }
+
+    const fallback = candidates.slice(0, Number(limit))
+    res.json({ recommendations: fallback })
   })
 
   // ─── Analytics (admin) ─────────────────────────────────
