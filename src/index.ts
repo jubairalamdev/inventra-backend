@@ -199,6 +199,84 @@ Return JSON with:
     res.status(500).json({ error: "No AI provider configured" })
   })
 
+  app.post("/api/ai/recommend", verifyToken, aiLimiter, async (req: Req, res: Response) => {
+    const { category, tags, limit = 4 } = req.body
+
+    const filter: any = {}
+    if (category) filter.category = category
+    if (tags?.length) filter.tags = { $in: tags }
+
+    const candidates = await db
+      .collection("product")
+      .find(filter)
+      .sort({ rating: -1 })
+      .limit(20)
+      .toArray()
+
+    if (candidates.length === 0)
+      return res.json({ items: [] })
+
+    const catalogSnippet = candidates
+      .map((p) => `- ${p._id}: ${p.title} [${p.category}] rating=${p.rating}`)
+      .join("\n")
+
+    const prompt = `Given these available AI agent assets:
+${catalogSnippet}
+
+User context: category=${category || "any"}, tags=${tags?.join(",") || "any"}
+
+Return a JSON array of up to ${limit} item _id values that best match the user's context. Format: { "items": ["id1", "id2", ...] }`
+
+    const provider = process.env.AI_PROVIDER || "openai"
+
+    if (provider === "openai") {
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        response_format: { type: "json_object" },
+      })
+      const result = JSON.parse(completion.choices[0].message.content!)
+      const items = await db
+        .collection("product")
+        .find({ _id: { $in: result.items.map((id: string) => new ObjectId(id)) } })
+        .toArray()
+      return res.json({ items })
+    }
+
+    if (provider === "gemini") {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+      const result = await model.generateContent(prompt + "\n\nRespond with JSON only.")
+      const text = result.response.text().replace(/```json|```/g, "").trim()
+      const parsed = JSON.parse(text)
+      const items = await db
+        .collection("product")
+        .find({ _id: { $in: parsed.items.map((id: string) => new ObjectId(id)) } })
+        .toArray()
+      return res.json({ items })
+    }
+
+    if (provider === "claude") {
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        temperature: 0,
+        messages: [{ role: "user", content: prompt }],
+      })
+      const parsed = JSON.parse((msg.content[0] as any).text!)
+      const items = await db
+        .collection("product")
+        .find({ _id: { $in: parsed.items.map((id: string) => new ObjectId(id)) } })
+        .toArray()
+      return res.json({ items })
+    }
+
+    res.status(500).json({ error: "No AI provider configured" })
+  })
+
   function requireRole(...roles: string[]) {
     return (req: Req, res: Response, next: NextFunction) => {
       if (!req.user)
