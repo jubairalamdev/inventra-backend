@@ -113,7 +113,7 @@ async function start() {
 
   app.post("/api/products", verifyToken, async (req: Req, res: Response) => {
     sanitize(req.body)
-    const { name, description, longDescription, price, category, brand, images, stock, specs, tags } = req.body
+    const { name, description, longDescription, price, category, brand, image_url, stock, specs, tags } = req.body
     if (!name || typeof name !== "string" || name.length > 200)
       return res.status(400).json({ error: "name is required (max 200 chars)" })
     if (price === undefined || isNaN(Number(price)) || Number(price) <= 0)
@@ -130,7 +130,7 @@ async function start() {
       price: Number(price),
       category,
       brand: brand || "",
-      images: images || [],
+      image_url: image_url || "",
       stock: stock ?? 0,
       rating: 0,
       specs: specs || {},
@@ -146,7 +146,7 @@ async function start() {
   app.put("/api/products/:id", verifyToken, async (req: Req, res: Response) => {
     if (req.user!.role !== "admin") return res.status(403).json({ error: "Admin only" })
     sanitize(req.body)
-    const { name, description, longDescription, price, category, brand, images, stock, specs, tags } = req.body
+    const { name, description, longDescription, price, category, brand, image_url, stock, specs, tags } = req.body
     const update: any = { updatedAt: new Date() }
     if (name !== undefined) update.name = name
     if (description !== undefined) update.description = description
@@ -154,7 +154,7 @@ async function start() {
     if (price !== undefined) update.price = Number(price)
     if (category !== undefined) update.category = category
     if (brand !== undefined) update.brand = brand
-    if (images !== undefined) update.images = images
+    if (image_url !== undefined) update.image_url = image_url
     if (stock !== undefined) update.stock = stock
     if (specs !== undefined) update.specs = specs
     if (tags !== undefined) update.tags = tags
@@ -285,6 +285,26 @@ async function start() {
     res.json({ orders })
   })
 
+  app.get("/api/orders/admin", verifyToken, async (req: Req, res: Response) => {
+    if (req.user!.role !== "admin") return res.status(403).json({ error: "Admin only" })
+    const orders = await db.collection("orders").find().sort({ createdAt: -1 }).toArray()
+    res.json({ orders })
+  })
+
+  app.put("/api/orders/:id/status", verifyToken, async (req: Req, res: Response) => {
+    if (req.user!.role !== "admin") return res.status(403).json({ error: "Admin only" })
+    const { status } = req.body
+    const valid = ["confirmed", "shipped", "delivered", "cancelled"]
+    if (!valid.includes(status)) return res.status(400).json({ error: `Status must be one of: ${valid.join(", ")}` })
+    const order = await db.collection("orders").findOneAndUpdate(
+      { _id: new ObjectId(req.params.id) },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: "after" },
+    )
+    if (!order) return res.status(404).json({ error: "Order not found" })
+    res.json(order)
+  })
+
   app.get("/api/orders/:id", verifyToken, async (req: Req, res: Response) => {
     const order = await db.collection("orders").findOne({ _id: new ObjectId(req.params.id) })
     if (!order) return res.status(404).json({ error: "Order not found" })
@@ -297,49 +317,17 @@ async function start() {
 
   const aiLimiter = rateLimit({ windowMs: 60_000, max: 20 })
 
-  const CATEGORIES = ["Keyboards", "Mice", "Headsets", "Controllers", "Mousepads", "Chairs", "Monitors", "Speakers", "Webcams", "Capture Cards"]
-
-  async function callGemini(prompt: string): Promise<string | null> {
+  async function callGemini(prompt: string): Promise<{ text: string } | { error: string }> {
     try {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" })
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" })
       const result = await model.generateContent({ contents: [{ role: "user", parts: [{ text: prompt }] }] })
-      return result.response.text().replace(/```json|```/g, "").trim()
+      return { text: result.response.text().replace(/```json|```/g, "").trim() }
     } catch (err: any) {
       console.error("Gemini API error:", err.message)
-      return null
+      return { error: err.message || "Unknown Gemini error" }
     }
   }
-
-  app.post("/api/ai/generate", verifyToken, aiLimiter, async (req: Req, res: Response) => {
-    const { name, category, keywords, tone } = req.body
-    if (!name) return res.status(400).json({ error: "name is required" })
-
-    const prompt = `You are a product copywriter for a gaming gadgets ecommerce store.
-Generate a product listing for a gaming gadget.
-Product name: ${name}
-Category: ${category || "general"}
-Keywords: ${keywords || "none"}
-Tone: ${tone || "professional"}
-
-Return JSON with these fields:
-- description (1-2 sentence short description)
-- longDescription (2-3 paragraphs of marketing copy, markdown)
-- tags (array of 3-5 relevant tags)
-- specs (object with 3-6 key-value pairs of technical specifications relevant to this type of gaming gadget)
-- price (a reasonable price number between 20 and 500)
-
-Only respond with JSON, no other text.`
-
-    const text = await callGemini(prompt)
-    if (!text) return res.status(503).json({ error: "AI service unavailable (quota exceeded). Try again later." })
-
-    try {
-      res.json(JSON.parse(text))
-    } catch {
-      res.status(500).json({ error: "Failed to parse AI response" })
-    }
-  })
 
   app.post("/api/ai/recommend", verifyToken, aiLimiter, async (req: Req, res: Response) => {
     const { productId, category, limit = 4 } = req.body
@@ -357,11 +345,11 @@ ${snippet}
 
 Pick the top ${limit} items most likely to be bought together or viewed together. Return a JSON array of _id values: { "items": ["id1", "id2", ...] }`
 
-    const text = await callGemini(prompt)
+    const geminiResult = await callGemini(prompt)
 
-    if (text) {
+    if (!("error" in geminiResult)) {
       try {
-        const parsed = JSON.parse(text)
+        const parsed = JSON.parse(geminiResult.text)
         const items = await db.collection("products").find({ _id: { $in: parsed.items.map((id: string) => new ObjectId(id)) } }).toArray()
         return res.json({ recommendations: items })
       } catch {
@@ -371,32 +359,6 @@ Pick the top ${limit} items most likely to be bought together or viewed together
 
     const fallback = candidates.slice(0, Number(limit))
     res.json({ recommendations: fallback })
-  })
-
-  // ─── Analytics (admin) ─────────────────────────────────
-
-  app.get("/api/analytics", verifyToken, async (req: Req, res: Response) => {
-    if (req.user!.role !== "admin") return res.status(403).json({ error: "Admin only" })
-
-    const totalProducts = await db.collection("products").countDocuments()
-    const totalOrders = await db.collection("orders").countDocuments()
-    const totalRevenue = await db.collection("orders").aggregate([{ $group: { _id: null, total: { $sum: "$total" } } }]).toArray()
-    const ordersByStatus = await db.collection("orders").aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]).toArray()
-    const ordersByDay = await db.collection("orders").aggregate([
-      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 }, revenue: { $sum: "$total" } } },
-      { $sort: { _id: 1 } },
-      { $limit: 30 },
-    ]).toArray()
-    const categoryBreakdown = await db.collection("products").aggregate([{ $group: { _id: "$category", count: { $sum: 1 } } }]).toArray()
-
-    res.json({
-      totalProducts,
-      totalOrders,
-      totalRevenue: totalRevenue[0]?.total || 0,
-      ordersByStatus,
-      ordersByDay,
-      categoryBreakdown,
-    })
   })
 
   // ─── Support Tickets ───────────────────────────────────
