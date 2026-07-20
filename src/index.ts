@@ -30,13 +30,27 @@ async function start() {
   ])
   console.log("Indexes created")
 
+  app.set("trust proxy", 1)
   app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }))
-  app.use(express.json())
+  app.use(express.json({ limit: "1mb" }))
 
   const apiLimiter = rateLimit({ windowMs: 60_000, max: 100 })
   app.use("/api/", apiLimiter)
 
   type Req = Request & { user?: any }
+
+  function sanitize(v: any): any {
+    if (typeof v === "object" && v !== null) {
+      for (const key of Object.keys(v)) {
+        if (key.startsWith("$")) {
+          delete v[key]
+        } else {
+          sanitize(v[key])
+        }
+      }
+    }
+    return v
+  }
 
   async function verifyToken(req: Req, res: Response, next: NextFunction) {
     const header = req.headers.authorization
@@ -59,6 +73,7 @@ async function start() {
   }
 
   app.get("/api/items", async (req: Req, res: Response) => {
+    sanitize(req.query)
     const {
       category,
       minPrice,
@@ -110,9 +125,16 @@ async function start() {
   })
 
   app.post("/api/items", verifyToken, async (req: Req, res: Response) => {
+    sanitize(req.body)
     const { title, shortDescription, fullDescription, price, category, tags } = req.body
-    if (!title || !price || !category)
-      return res.status(400).json({ error: "title, price, and category are required" })
+    if (!title || typeof title !== "string" || title.length > 200)
+      return res.status(400).json({ error: "title must be a string (max 200 chars)" })
+    if (price === undefined || isNaN(Number(price)) || Number(price) <= 0)
+      return res.status(400).json({ error: "price must be a positive number" })
+    if (!category || typeof category !== "string")
+      return res.status(400).json({ error: "category is required" })
+    if (tags && (!Array.isArray(tags) || tags.some((t: any) => typeof t !== "string")))
+      return res.status(400).json({ error: "tags must be an array of strings" })
 
     const item = {
       title,
