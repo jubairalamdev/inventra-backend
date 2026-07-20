@@ -98,6 +98,14 @@ async function start() {
     res.json({ items, nextCursor })
   })
 
+  app.get("/api/items/:id", async (req: Req, res: Response) => {
+    const item = await db.collection("product").findOne({
+      _id: new ObjectId(req.params.id),
+    })
+    if (!item) return res.status(404).json({ error: "Product not found" })
+    res.json(item)
+  })
+
   function requireRole(...roles: string[]) {
     return (req: Req, res: Response, next: NextFunction) => {
       if (!req.user)
